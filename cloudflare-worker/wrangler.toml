@@ -1,0 +1,26 @@
+name = "amigurumi-lovelace-webhook"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Free tier: nenhum recurso abaixo tem custo dentro dos limites do Workers Free plan
+# (Queues: 10.000 operações/dia; KV: 100.000 leituras/dia, 1.000 escritas/dia, 1 GB).
+
+[[queues.producers]]
+queue = "beatriz-orders"
+binding = "ORDERS_QUEUE"
+
+[[kv_namespaces]]
+binding = "IDEMPOTENCY_KV"
+# TODO(você): substituir pelo ID real do namespace KV.
+# Criar com: npx wrangler kv namespace create IDEMPOTENCY_KV
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+# Nome do header HTTP onde a Nuvemshop envia a assinatura HMAC do payload.
+# TODO(você): confirmar o nome exato na documentação da Nuvemshop antes do deploy.
+WEBHOOK_SIGNATURE_HEADER = "x-linkedstore-hmac-sha256"
+# TTL (em segundos) da chave de idempotência no KV. 30 dias por padrão.
+IDEMPOTENCY_TTL_SECONDS = "2592000"
+
+# Segredo usado para validar a assinatura HMAC do webhook. NÃO commitar o valor.
+# Definir com: npx wrangler secret put WEBHOOK_SIGNING_SECRET
