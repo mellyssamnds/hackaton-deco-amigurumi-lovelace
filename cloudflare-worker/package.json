@@ -1,0 +1,21 @@
+{
+  "name": "cloudflare-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Recebe o webhook order/paid da Nuvemshop e publica na fila beatriz-orders para processamento.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4",
+    "wrangler": "^4.20.0"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}
