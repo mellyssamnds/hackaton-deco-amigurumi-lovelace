@@ -1,8 +1,9 @@
 # nestjs-worker — Parte 2 (processing)
 
-Branch: `nestjs-queue-processing`
+Branch: `pessoa2/nestjs-queue-processing`
 
-Consome a Cloudflare Queue `beatriz-orders`, busca o pedido completo na Nuvemshop, valida e monta o `WatermarkJob` consumido pela Parte 3.
+Consome a Cloudflare Queue `beatriz-orders`, busca o pedido completo na
+Nuvemshop, valida e monta o `WatermarkJob` consumido pela Parte 3.
 
 ## Rodando localmente
 
@@ -26,7 +27,11 @@ docker compose up -d --build
 npm test
 ```
 
-20 testes cobrindo: `NuvemshopClient` (retry/backoff, erro 4xx sem retry), `OrderService` (pedido válido, CPF ausente/malformado, payload inválido, falha na Nuvemshop), `QueueConsumer` (sucesso, mensagem malformada, erro de dado, falha de infraestrutura, fila vazia) e `HttpWatermarkJobDispatcher` (entrega com sucesso, retry em 5xx/rede, erro 4xx sem retry, falha
+20 testes cobrindo: `NuvemshopClient` (retry/backoff, erro 4xx sem retry),
+`OrderService` (pedido válido, CPF ausente/malformado, payload inválido,
+falha na Nuvemshop), `QueueConsumer` (sucesso, mensagem malformada, erro
+de dado, falha de infraestrutura, fila vazia) e `HttpWatermarkJobDispatcher`
+(entrega com sucesso, retry em 5xx/rede, erro 4xx sem retry, falha
 persistente após esgotar tentativas).
 
 ## Escopo desta etapa (BACKLOG.md > Parte 2)
@@ -43,18 +48,37 @@ persistente após esgotar tentativas).
 
 ## Integração com a Parte 3 (fechada)
 
-Os dois serviços rodam como containers Docker separados na mesma VM (`docker-compose.yml`, serviço `watermark-email` na porta 3001). A entrega do `WatermarkJob` acontece via `POST {WATERMARK_EMAIL_URL}/watermark-jobs`, implementado em `HttpWatermarkJobDispatcher` (`src/order/watermark-job.dispatcher.ts`) e configurado como provider default de `WatermarkJobDispatcher` em `queue.module.ts`.
+Os dois serviços rodam como containers Docker separados na mesma VM
+(`docker-compose.yml`, serviço `watermark-email` na porta 3001). A entrega
+do `WatermarkJob` acontece via `POST {WATERMARK_EMAIL_URL}/watermark-jobs`,
+implementado em `HttpWatermarkJobDispatcher`
+(`src/order/watermark-job.dispatcher.ts`) e configurado como provider
+default de `WatermarkJobDispatcher` em `queue.module.ts`.
 
-Resiliência: mesmo padrão de retry com backoff exponencial do `NuvemshopClient` — erros de rede/5xx são retentados (`WATERMARK_DISPATCH_MAX_RETRIES`, default 3) e, se persistirem após
-esgotar as tentativas, propagam `WatermarkDispatchError` (o `QueueConsumer` trata como falha de infraestrutura: mensagem volta para retry na fila). Erros 4xx (payload rejeitado pela Parte 3, ex.: e-book inexistente para o `product_id`) não são retentados e propagam `WatermarkJobRejectedError`, tratado pelo `QueueConsumer` como erro de dado — igual a `InvalidOrderError`/`InvalidBuyerCpfError`: ack imediato (sem retentar indefinidamente), registrado em log para investigação manual.
+Resiliência: mesmo padrão de retry com backoff exponencial do
+`NuvemshopClient` — erros de rede/5xx são retentados
+(`WATERMARK_DISPATCH_MAX_RETRIES`, default 3) e, se persistirem após
+esgotar as tentativas, propagam `WatermarkDispatchError` (o
+`QueueConsumer` trata como falha de infraestrutura: mensagem volta para
+retry na fila). Erros 4xx (payload rejeitado pela Parte 3, ex.: e-book
+inexistente para o `product_id`) não são retentados e propagam
+`WatermarkJobRejectedError`, tratado pelo `QueueConsumer` como erro de
+dado — igual a `InvalidOrderError`/`InvalidBuyerCpfError`: ack imediato
+(sem retentar indefinidamente), registrado em log para investigação
+manual.
 
-`LoggingWatermarkJobDispatcher` continua disponível na mesma classe, mas só para uso em testes/dev — não é mais o provider de produção.
+`LoggingWatermarkJobDispatcher` continua disponível na mesma classe, mas
+só para uso em testes/dev — não é mais o provider de produção.
 
 ## Pendências / decisões em aberto
 
-1. **Campo real de CPF na Nuvemshop.** `order.schema.ts` usa `contact_identification` como placeholder. Confirmar com o time o campo real (depende do app de checkout da loja) e ajustar
+1. **Campo real de CPF na Nuvemshop.** `order.schema.ts` usa
+   `contact_identification` como placeholder. Confirmar com o time o campo
+   real (depende do app de checkout da loja) e ajustar
    `OrderService.extractBuyerCpf()` — é a única função que precisa mudar.
 
 ## O que NÃO está nesta etapa
 
-Geração/marca d'água do PDF e envio de e-mail são responsabilidade da Parte 3 (`yasmine/pdf-watermark-email`). Esta etapa termina no `WatermarkJob` válido.
+Geração/marca d'água do PDF e envio de e-mail são responsabilidade da
+Parte 3 (serviço `watermark-email`, branch `yasmine/pdf-watermark-email`).
+Esta etapa termina no `WatermarkJob` válido.
