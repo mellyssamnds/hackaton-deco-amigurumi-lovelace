@@ -134,9 +134,22 @@ export class QueueConsumer implements OnModuleInit {
       // Falha de infraestrutura (rede, timeout, 5xx da Nuvemshop ou da
       // Parte 3): vale a pena tentar de novo depois.
       this.logger.error(
-        `Falha ao processar pedido ${queueMessage.order_id}, será retentado: ${err}`,
+        `Falha ao processar pedido ${queueMessage.order_id}, será retentado: ` +
+          this.describeError(err),
       );
       return 'retry';
     }
+  }
+
+  /**
+   * Extrai uma mensagem legível do erro para log. Erros crus (ex.:
+   * AxiosError) não viram texto útil com template literal puro (podem
+   * virar "[object Object]"), então priorizamos err.message.
+   */
+  private describeError(err: unknown): string {
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return String(err);
   }
 }

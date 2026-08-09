@@ -105,4 +105,18 @@ describe('HttpWatermarkJobDispatcher', () => {
     // default de maxRetries é 3 => 4 tentativas no total
     expect(httpPostMock).toHaveBeenCalledTimes(4);
   });
+
+  it('rejeita valores fracionários (ex.: "1.5") e usa o default, em vez de gerar contagem/delay fracionário', async () => {
+    const fractionalConfig = new ConfigService({
+      WATERMARK_EMAIL_URL: 'http://watermark-email:3001',
+      WATERMARK_DISPATCH_MAX_RETRIES: '1.5',
+      WATERMARK_DISPATCH_RETRY_BASE_DELAY_MS: 1, // rápido nos testes
+    });
+    httpPostMock.mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+    const dispatcher = new HttpWatermarkJobDispatcher(fractionalConfig);
+
+    await expect(dispatcher.dispatch(job)).rejects.toBeInstanceOf(WatermarkDispatchError);
+    // default de maxRetries é 3 (1.5 é rejeitado) => 4 tentativas no total
+    expect(httpPostMock).toHaveBeenCalledTimes(4);
+  });
 });

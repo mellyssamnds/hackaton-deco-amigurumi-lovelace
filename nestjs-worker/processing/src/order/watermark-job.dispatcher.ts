@@ -160,7 +160,7 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
     const raw = this.config.get(envKey, fallback);
     const parsed = Number(raw);
 
-    if (!Number.isFinite(parsed) || parsed < 0) {
+    if (!Number.isInteger(parsed) || parsed < 0) {
       this.logger.warn(
         `${envKey}="${raw}" inválido (esperado inteiro >= 0) - usando default ${fallback}`,
       );
