@@ -91,4 +91,18 @@ describe('HttpWatermarkJobDispatcher', () => {
     });
     expect(httpPostMock).toHaveBeenCalledTimes(3);
   });
+
+  it('usa os defaults (3 tentativas, 500ms) quando as envs de retry são inválidas, em vez de virar NaN e falhar sem tentar', async () => {
+    const invalidConfig = new ConfigService({
+      WATERMARK_EMAIL_URL: 'http://watermark-email:3001',
+      WATERMARK_DISPATCH_MAX_RETRIES: 'not-a-number',
+      WATERMARK_DISPATCH_RETRY_BASE_DELAY_MS: -100,
+    });
+    httpPostMock.mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+    const dispatcher = new HttpWatermarkJobDispatcher(invalidConfig);
+
+    await expect(dispatcher.dispatch(job)).rejects.toBeInstanceOf(WatermarkDispatchError);
+    // default de maxRetries é 3 => 4 tentativas no total
+    expect(httpPostMock).toHaveBeenCalledTimes(4);
+  });
 });

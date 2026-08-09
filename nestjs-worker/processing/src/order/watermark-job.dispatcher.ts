@@ -71,9 +71,13 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
       'WATERMARK_EMAIL_URL',
       'http://watermark-email:3001',
     );
-    this.maxRetries = Number(this.config.get('WATERMARK_DISPATCH_MAX_RETRIES', 3));
-    this.baseDelayMs = Number(
-      this.config.get('WATERMARK_DISPATCH_RETRY_BASE_DELAY_MS', 500),
+    this.maxRetries = this.parseNonNegativeInt(
+      'WATERMARK_DISPATCH_MAX_RETRIES',
+      3,
+    );
+    this.baseDelayMs = this.parseNonNegativeInt(
+      'WATERMARK_DISPATCH_RETRY_BASE_DELAY_MS',
+      500,
     );
 
     this.http = axios.create({
@@ -102,7 +106,7 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
         if (isClientError) {
           this.logger.error(
             `Parte 3 rejeitou o WatermarkJob do pedido ${job.order_id} ` +
-              `(status ${status}) - não retentável, descartando da fila`,
+              `(status ${status}) - erro 4xx não retentável`,
           );
           throw new WatermarkJobRejectedError(
             `watermark-email respondeu ${status} para o pedido ${job.order_id}`,
@@ -143,6 +147,27 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
       return err.message;
     }
     return String(err);
+  }
+
+  /**
+   * Lê um inteiro >= 0 do ConfigService com fallback seguro. Uma env
+   * inválida (não numérica) ou negativa não deve virar NaN silencioso -
+   * isso faria o loop de retry (0 <= NaN é sempre false) nem rodar,
+   * causando falha imediata e difícil de diagnosticar. Em vez disso,
+   * loga um aviso e usa o default.
+   */
+  private parseNonNegativeInt(envKey: string, fallback: number): number {
+    const raw = this.config.get(envKey, fallback);
+    const parsed = Number(raw);
+
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      this.logger.warn(
+        `${envKey}="${raw}" inválido (esperado inteiro >= 0) - usando default ${fallback}`,
+      );
+      return fallback;
+    }
+
+    return parsed;
   }
 
   private sleep(ms: number): Promise<void> {
