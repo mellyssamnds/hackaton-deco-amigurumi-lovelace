@@ -27,12 +27,13 @@ docker compose up -d --build
 npm test
 ```
 
-20 testes cobrindo: `NuvemshopClient` (retry/backoff, erro 4xx sem retry),
-`OrderService` (pedido válido, CPF ausente/malformado, payload inválido,
-falha na Nuvemshop), `QueueConsumer` (sucesso, mensagem malformada, erro
-de dado, falha de infraestrutura, fila vazia) e `HttpWatermarkJobDispatcher`
-(entrega com sucesso, retry em 5xx/rede, erro 4xx sem retry, falha
-persistente após esgotar tentativas).
+26 testes cobrindo: `NuvemshopClient` (retry/backoff, erro 4xx sem retry),
+`OrderService` (pedido válido, fallback `contact_identification` →
+`customer.identification`, CPF ausente em ambos os campos, CPF malformado,
+payload inválido, falha na Nuvemshop), `QueueConsumer` (sucesso, mensagem
+malformada, erro de dado, falha de infraestrutura, fila vazia) e
+`HttpWatermarkJobDispatcher` (entrega com sucesso, retry em 5xx/rede, erro
+4xx sem retry, falha persistente após esgotar tentativas).
 
 ## Escopo desta etapa (BACKLOG.md > Parte 2)
 
@@ -72,10 +73,16 @@ só para uso em testes/dev — não é mais o provider de produção.
 
 ## Pendências / decisões em aberto
 
-1. **Campo real de CPF na Nuvemshop.** `order.schema.ts` usa
-   `contact_identification` como placeholder. Confirmar com o time o campo
-   real (depende do app de checkout da loja) e ajustar
-   `OrderService.extractBuyerCpf()` — é a única função que precisa mudar.
+1. ~~**Campo real de CPF na Nuvemshop.**~~ **Resolvida ([PR #5](https://github.com/mellyssamnds/hackaton-deco-amigurumi-lovelace/pull/5)).**
+
+   `contact_identification` (raiz do `Order`) foi confirmado na doc oficial
+   da API (2025-03) como o campo correto, com fallback para
+   `customer.identification` (objeto `Customer` aninhado) quando o
+   primeiro vier vazio — implementado em
+   `OrderService.extractBuyerCpf()`. Compra via CNPJ (pessoa jurídica)
+   não é um caso real a suportar; o método só aceita CPF (11 dígitos).
+   Ainda vale testar com um pedido real da loja para confirmar que o
+   checkout usado de fato popula um dos dois campos em produção.
 
 ## O que NÃO está nesta etapa
 
