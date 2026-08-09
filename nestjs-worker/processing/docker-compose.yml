@@ -1,0 +1,28 @@
+version: "3.8"
+
+# Amigurumi Lovelace / Projeto Beatriz - nestjs-worker
+# Este compose roda na VM Oracle Cloud (sem CI/CD), 24/7.
+#
+# ATENÇÃO (Parte 2 / Parte 3 compartilham esta pasta):
+# Este arquivo define, por enquanto, apenas o serviço `processing` (Parte 2:
+# consumo da fila + preparo do WatermarkJob). A Parte 3 (marca d'água + e-mail)
+# deve adicionar aqui o serviço `watermark-email` sem remover/renomear o
+# serviço `processing` já existente, para não quebrar este deploy.
+
+services:
+  processing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: beatriz-processing
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
