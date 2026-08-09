@@ -50,7 +50,7 @@ de dado, falha de infraestrutura, fila vazia).
    `OrderService.extractBuyerCpf()` — é a única função que precisa mudar.
 2. **Integração com a Parte 3.** `WatermarkJobDispatcher` hoje só loga o
    job pronto (`LoggingWatermarkJobDispatcher`). Quando a branch
-   `pessoa3/pdf-watermark-email` estiver pronta, trocar o provider em
+   `yasmine/pdf-watermark-email` estiver pronta, trocar o provider em
    `queue.module.ts` pela implementação real (`WatermarkService` +
    `DeliveryService`), sem alterar o contrato `WatermarkJob`.
 3. **`docker-compose.yml` compartilhado.** A Parte 3 deve adicionar seu
@@ -60,5 +60,5 @@ de dado, falha de infraestrutura, fila vazia).
 ## O que NÃO está nesta etapa
 
 Geração/marca d'água do PDF e envio de e-mail são responsabilidade da
-Parte 3 (`pessoa3/pdf-watermark-email`). Esta etapa termina no
+Parte 3 (`yasmine/pdf-watermark-email`). Esta etapa termina no
 `WatermarkJob` válido.
