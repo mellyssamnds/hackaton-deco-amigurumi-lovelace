@@ -47,7 +47,31 @@ describe('OrderService', () => {
     expect(job.buyer_cpf).toBe('123.456.789-00');
   });
 
-  it('pedido com CPF ausente → InvalidBuyerCpfError (erro tratado)', async () => {
+  it('contact_identification ausente → faz fallback para customer.identification', async () => {
+    const { service } = buildService(async () => ({
+      ...validRawOrder,
+      contact_identification: null,
+      customer: { identification: '12345678900' },
+    }));
+
+    const job = await service.buildWatermarkJob('12345');
+
+    expect(job.buyer_cpf).toBe('123.456.789-00');
+  });
+
+  it('pedido com CPF ausente em ambos os campos → InvalidBuyerCpfError (erro tratado)', async () => {
+    const { service } = buildService(async () => ({
+      ...validRawOrder,
+      contact_identification: null,
+      customer: { identification: null },
+    }));
+
+    await expect(service.buildWatermarkJob('12345')).rejects.toBeInstanceOf(
+      InvalidBuyerCpfError,
+    );
+  });
+
+  it('pedido sem customer e sem contact_identification → InvalidBuyerCpfError (erro tratado)', async () => {
     const { service } = buildService(async () => ({
       ...validRawOrder,
       contact_identification: null,
