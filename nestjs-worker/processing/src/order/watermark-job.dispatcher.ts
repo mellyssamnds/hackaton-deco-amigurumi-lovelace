@@ -4,7 +4,7 @@ import axios, { AxiosInstance } from 'axios';
 import { WatermarkJob } from './watermark-job.type';
 
 /**
- * Ponto de integração com a Parte 3 (pdf-watermark-email).
+ * Ponto de integração com a Parte 3 (watermark-email).
  *
  * A Parte 2 termina seu trabalho ao produzir um WatermarkJob válido e o
  * entrega para quem estiver implementando este contrato.
@@ -25,7 +25,7 @@ export class LoggingWatermarkJobDispatcher implements WatermarkJobDispatcher {
     this.logger.log(
       `WatermarkJob pronto para order_id=${job.order_id} ` +
         `(produtos: ${job.product_ids.join(', ')}) - ` +
-        'aguardando integração com a Parte 3 (pdf-watermark-email)',
+        'aguardando integração com a Parte 3 (watermark-email)',
     );
   }
 }
@@ -37,6 +37,7 @@ export class LoggingWatermarkJobDispatcher implements WatermarkJobDispatcher {
  * mensagem volta para retry na fila (ver QueueConsumer.processMessage).
  */
 export class WatermarkDispatchError extends Error {}
+export class NonRetriableWatermarkDispatchError extends WatermarkDispatchError {}
 
 /**
  * Implementação real de integração com a Parte 3 (watermark-email).
@@ -95,7 +96,7 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
             `Parte 3 rejeitou o WatermarkJob do pedido ${job.order_id} ` +
               `(status ${status}) - não retentável`,
           );
-          throw new WatermarkDispatchError(
+          throw new NonRetriableWatermarkDispatchError(
             `watermark-email respondeu ${status} para o pedido ${job.order_id}`,
           );
         }
@@ -115,11 +116,21 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
       `Todas as tentativas de entregar o WatermarkJob do pedido ${job.order_id} falharam`,
     );
     throw new WatermarkDispatchError(
-      `Falha ao entregar WatermarkJob do pedido ${job.order_id}: ${lastError}`,
+      `Falha ao entregar WatermarkJob do pedido ${job.order_id}: ${this.getErrorMessage(lastError)}`,
     );
   }
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
   }
 }

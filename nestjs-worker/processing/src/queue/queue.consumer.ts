@@ -4,7 +4,10 @@ import { CloudflareQueueClient } from './cloudflare-queue.client';
 import { QueueMessageSchema } from './queue-message.schema';
 import { PulledMessage, QueueMessage } from './queue.types';
 import { InvalidBuyerCpfError, InvalidOrderError, OrderService } from '../order/order.service';
-import { WatermarkJobDispatcher } from '../order/watermark-job.dispatcher';
+import {
+  NonRetriableWatermarkDispatchError,
+  WatermarkJobDispatcher,
+} from '../order/watermark-job.dispatcher';
 
 /**
  * HTTP Pull Consumer da Cloudflare Queue `beatriz-orders`.
@@ -116,6 +119,13 @@ export class QueueConsumer implements OnModuleInit {
         // travar a fila; fica registrado para investigação manual.
         this.logger.error(
           `Pedido ${queueMessage.order_id} não pôde ser validado, descartando da fila: ${err.message}`,
+        );
+        return 'ack';
+      }
+
+      if (err instanceof NonRetriableWatermarkDispatchError) {
+        this.logger.error(
+          `Pedido ${queueMessage.order_id} rejeitado pelo serviço watermark-email, descartando da fila: ${err.message}`,
         );
         return 'ack';
       }

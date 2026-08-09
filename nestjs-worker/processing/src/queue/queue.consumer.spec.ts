@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { CloudflareQueueClient } from './cloudflare-queue.client';
 import { QueueConsumer } from './queue.consumer';
 import { InvalidBuyerCpfError } from '../order/order.service';
+import { NonRetriableWatermarkDispatchError } from '../order/watermark-job.dispatcher';
 import { WatermarkJob } from '../order/watermark-job.type';
 
 describe('QueueConsumer', () => {
@@ -98,6 +99,29 @@ describe('QueueConsumer', () => {
 
     expect(queueClient.retry).toHaveBeenCalledWith(['lease-1']);
     expect(queueClient.ack).toHaveBeenCalledWith([]);
+  });
+
+  it('erro 4xx rejeitado pela Parte 3 → ack (não fica em retry na fila)', async () => {
+    const { consumer, queueClient, dispatcher } = buildConsumer({
+      messages: [{ id: 'm1', lease_id: 'lease-1', body: validEnvelope }],
+      buildWatermarkJob: async () => ({
+        order_id: '123',
+        buyer_full_name: 'Maria',
+        buyer_cpf: '123.456.789-00',
+        buyer_email: 'maria@example.com',
+        product_ids: ['1'],
+      }),
+    });
+    (dispatcher.dispatch as jest.Mock).mockRejectedValueOnce(
+      new NonRetriableWatermarkDispatchError(
+        'watermark-email respondeu 422 para o pedido 123',
+      ),
+    );
+
+    await consumer.pollOnce();
+
+    expect(queueClient.ack).toHaveBeenCalledWith(['lease-1']);
+    expect(queueClient.retry).toHaveBeenCalledWith([]);
   });
 
   it('fila vazia → não chama ack/retry', async () => {
