@@ -4,7 +4,7 @@ import { CloudflareQueueClient } from './cloudflare-queue.client';
 import { QueueMessageSchema } from './queue-message.schema';
 import { PulledMessage, QueueMessage } from './queue.types';
 import { InvalidBuyerCpfError, InvalidOrderError, OrderService } from '../order/order.service';
-import { WatermarkJobDispatcher } from '../order/watermark-job.dispatcher';
+import { WatermarkJobDispatcher, WatermarkJobRejectedError } from '../order/watermark-job.dispatcher';
 
 /**
  * HTTP Pull Consumer da Cloudflare Queue `beatriz-orders`.
@@ -120,12 +120,36 @@ export class QueueConsumer implements OnModuleInit {
         return 'ack';
       }
 
-      // Falha de infraestrutura (rede, timeout, 5xx da Nuvemshop): vale
-      // a pena tentar de novo depois.
+      if (err instanceof WatermarkJobRejectedError) {
+        // Erro de dado do lado da Parte 3 (4xx - payload rejeitado, ex.:
+        // e-book inexistente para o product_id). Reprocessar a mesma
+        // mensagem não corrige o problema: ack para não retentar
+        // indefinidamente, fica registrado para investigação manual.
+        this.logger.error(
+          `Pedido ${queueMessage.order_id} rejeitado pela Parte 3, descartando da fila: ${err.message}`,
+        );
+        return 'ack';
+      }
+
+      // Falha de infraestrutura (rede, timeout, 5xx da Nuvemshop ou da
+      // Parte 3): vale a pena tentar de novo depois.
       this.logger.error(
-        `Falha ao processar pedido ${queueMessage.order_id}, será retentado: ${err}`,
+        `Falha ao processar pedido ${queueMessage.order_id}, será retentado: ` +
+          this.describeError(err),
       );
       return 'retry';
     }
+  }
+
+  /**
+   * Extrai uma mensagem legível do erro para log. Erros crus (ex.:
+   * AxiosError) não viram texto útil com template literal puro (podem
+   * virar "[object Object]"), então priorizamos err.message.
+   */
+  private describeError(err: unknown): string {
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return String(err);
   }
 }

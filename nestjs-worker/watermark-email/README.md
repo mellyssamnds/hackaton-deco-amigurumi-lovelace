@@ -66,29 +66,19 @@ não existe).
 - [x] Log de sucesso/falha do envio sem CPF (US11)
 - [x] Healthcheck `/health` para o UptimeRobot
 
-## Decisão de integração com a Parte 2 (a confirmar com o time)
+## Decisão de integração com a Parte 2 (fechada)
 
-O ponto de integração documentado pela Parte 2 (`WatermarkJobDispatcher`
-em `nestjs-worker/processing/src/order/watermark-job.dispatcher.ts`) foi
-desenhado para injeção de dependência **no mesmo processo NestJS**. Já o
-`docker-compose.yml` compartilhado (comentário original da Parte 2) pede
-um serviço `watermark-email` **separado**.
+Ficou confirmado o serviço separado: os dois serviços rodam como
+containers Docker distintos na mesma VM (`docker-compose.yml`
+compartilhado, `watermark-email` na porta 3001), e a Parte 2 entrega o job
+via `POST /watermark-jobs` (contrato de entrada HTTP exposto aqui).
 
-Optei pelo serviço separado (mais fácil de testar isolado, como pede o
-BACKLOG.md, e é o que o compose já esperava), expondo `POST
-/watermark-jobs` como contrato de entrada HTTP. Para fechar a integração
-real, falta decidir com o time:
-
-1. Trocar `LoggingWatermarkJobDispatcher` (Parte 2) por uma implementação
-   que faz `POST http://watermark-email:3001/watermark-jobs` com o
-   `WatermarkJob`, **ou**
-2. Unificar os dois serviços num processo só, importando os módulos desta
-   pasta direto no `AppModule` da Parte 2 e implementando o
-   `WatermarkJobDispatcher` como um adapter fino sobre
-   `WatermarkOrchestratorService`.
-
-Não alterei o código já mergeado da Parte 2 para essa decisão ser tomada
-em conjunto.
+Do lado da Parte 2, `HttpWatermarkJobDispatcher`
+(`nestjs-worker/processing/src/order/watermark-job.dispatcher.ts`) é o
+provider default de `WatermarkJobDispatcher` em produção, com retry em
+erros de rede/5xx. Nada nesta pasta precisou mudar para fechar a
+integração — o contrato `WatermarkJob`/`WatermarkJobSchema` seguiu
+inalterado.
 
 ## O que NÃO está nesta etapa
 

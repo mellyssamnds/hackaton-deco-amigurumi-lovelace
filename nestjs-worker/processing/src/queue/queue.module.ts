@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { OrderModule } from '../order/order.module';
 import {
-  LoggingWatermarkJobDispatcher,
+  HttpWatermarkJobDispatcher,
   WatermarkJobDispatcher,
 } from '../order/watermark-job.dispatcher';
 import { CloudflareQueueClient } from './cloudflare-queue.client';
@@ -12,9 +12,9 @@ import { QueueConsumer } from './queue.consumer';
   providers: [
     CloudflareQueueClient,
     QueueConsumer,
-    // TODO: quando a Parte 3 for integrada, sobrescrever este provider
-    // com a implementação real (WatermarkService + DeliveryService).
-    { provide: WatermarkJobDispatcher, useClass: LoggingWatermarkJobDispatcher },
+    // Integração real com a Parte 3 (watermark-email): POST /watermark-jobs
+    // no serviço separado (ver docker-compose.yml e .env WATERMARK_EMAIL_URL).
+    { provide: WatermarkJobDispatcher, useClass: HttpWatermarkJobDispatcher },
   ],
   exports: [QueueConsumer],
 })
