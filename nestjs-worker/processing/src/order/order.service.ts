@@ -75,23 +75,30 @@ export class OrderService {
   /**
    * Extração do CPF isolada de propósito.
    *
-   * TODO: confirmar com o time o campo real de CPF na API da Nuvemshop.
-   * Hoje usamos `contact_identification` como placeholder. Se o campo real
-   * for outro (ex.: um campo customizado do checkout, ou vier dentro de
-   * `note`/metadata), a mudança fica contida aqui - o resto do serviço
-   * (e o contrato WatermarkJob) não muda.
+   * Campo confirmado na doc oficial da Nuvemshop (Pendência 1 resolvida):
+   * tenta `contact_identification` (raiz do Order) primeiro; se vier vazio,
+   * cai para `customer.identification` (objeto Customer aninhado). Ambos
+   * podem estar ausentes dependendo do app de checkout da loja - por isso
+   * o fallback, em vez de confiar em um único campo.
    *
    * Também aplica uma formatação defensiva: se o valor vier só com dígitos
    * (ex. "12345678900"), formata como CPF (123.456.789-00). Se já vier
    * formatado, mantém como está.
+   *
+   * Nota: só cobre CPF (11 dígitos). Se algum comprador for pessoa jurídica
+   * (CNPJ, 14 dígitos), este método rejeita como CPF malformado - o
+   * contrato WatermarkJob (buyer_cpf) hoje só prevê CPF, então isso é uma
+   * decisão consciente, não um bug. Compra via CNPJ não é 
+   * um caso real a suportar.
    */
   private extractBuyerCpf(order: Order): string {
-    const raw = order.contact_identification?.trim();
+    const raw =
+      order.contact_identification?.trim() ||
+      order.customer?.identification?.trim();
 
     if (!raw) {
       this.logger.warn(
-        `Pedido ${order.id} sem CPF em contact_identification (placeholder). ` +
-          'Confirmar campo real com o time antes de ir para produção.',
+        `Pedido ${order.id} sem CPF em contact_identification e customer.identification.`,
       );
       throw new InvalidBuyerCpfError(order.id, 'campo ausente/vazio');
     }
@@ -105,7 +112,7 @@ export class OrderService {
     }
 
     this.logger.warn(
-      `contact_identification do pedido ${order.id} não parece um CPF válido: "${raw}"`,
+      `CPF do pedido ${order.id} não parece válido: "${raw}"`,
     );
     throw new InvalidBuyerCpfError(
       order.id,
