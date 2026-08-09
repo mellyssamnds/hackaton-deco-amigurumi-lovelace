@@ -31,8 +31,10 @@ export class DeliveryService {
   private readonly fromEmail: string;
   private readonly maxRetries: number;
   private readonly baseDelayMs: number;
+  private readonly deliveryMode: string;
 
   constructor(private readonly config: ConfigService) {
+    this.deliveryMode = this.config.get<string>('EMAIL_DELIVERY_MODE', 'resend');
     this.resend = new Resend(this.config.get<string>('RESEND_API_KEY', ''));
     this.fromEmail = this.config.get<string>(
       'RESEND_FROM_EMAIL',
@@ -48,6 +50,11 @@ export class DeliveryService {
     buyerFullName: string,
     attachments: WatermarkedAttachment[],
   ): Promise<void> {
+    if (this.deliveryMode === 'mock') {
+      this.logger.log(`Modo mock ativado: simulando envio para o pedido ${orderId}`);
+      return;
+    }
+
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
