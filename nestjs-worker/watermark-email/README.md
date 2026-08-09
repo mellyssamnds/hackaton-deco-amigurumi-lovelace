@@ -1,6 +1,6 @@
 # nestjs-worker — Parte 3 (watermark-email)
 
-Branch: `pessoa3/pdf-watermark-email`
+Branch: `yasmine/pdf-watermark-email`
 
 Recebe o `WatermarkJob` montado pela Parte 2, carrega o e-book original
 correspondente a cada `product_id`, aplica a marca d'água com `pdf-lib`
