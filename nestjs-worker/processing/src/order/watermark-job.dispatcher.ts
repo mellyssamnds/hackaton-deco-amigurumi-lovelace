@@ -31,13 +31,21 @@ export class LoggingWatermarkJobDispatcher implements WatermarkJobDispatcher {
 }
 
 /**
- * Erro específico para falha ao entregar o job à Parte 3 - permite ao
- * QueueConsumer diferenciar (se necessário) de outros erros de
- * infraestrutura. Hoje é tratado como qualquer outro erro não-validação:
- * mensagem volta para retry na fila (ver QueueConsumer.processMessage).
+ * Falha de infraestrutura ao entregar o job à Parte 3 (rede/timeout/5xx
+ * persistente após esgotar as tentativas). O QueueConsumer trata isso como
+ * qualquer outro erro de infraestrutura: a mensagem volta para retry na
+ * fila (ver QueueConsumer.processMessage).
  */
 export class WatermarkDispatchError extends Error {}
-export class NonRetriableWatermarkDispatchError extends WatermarkDispatchError {}
+
+/**
+ * Erro de dado: a Parte 3 rejeitou o payload (4xx - ex.: schema inválido,
+ * e-book inexistente para o product_id). Reprocessar a mesma mensagem não
+ * vai corrigir o problema, então o QueueConsumer deve tratar isso como
+ * InvalidOrderError/InvalidBuyerCpfError: ack (não retentar) e registrar
+ * para investigação manual.
+ */
+export class WatermarkJobRejectedError extends Error {}
 
 /**
  * Implementação real de integração com a Parte 3 (watermark-email).
@@ -94,9 +102,9 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
         if (isClientError) {
           this.logger.error(
             `Parte 3 rejeitou o WatermarkJob do pedido ${job.order_id} ` +
-              `(status ${status}) - não retentável`,
+              `(status ${status}) - não retentável, descartando da fila`,
           );
-          throw new NonRetriableWatermarkDispatchError(
+          throw new WatermarkJobRejectedError(
             `watermark-email respondeu ${status} para o pedido ${job.order_id}`,
           );
         }
@@ -116,21 +124,28 @@ export class HttpWatermarkJobDispatcher implements WatermarkJobDispatcher {
       `Todas as tentativas de entregar o WatermarkJob do pedido ${job.order_id} falharam`,
     );
     throw new WatermarkDispatchError(
-      `Falha ao entregar WatermarkJob do pedido ${job.order_id}: ${this.getErrorMessage(lastError)}`,
+      `Falha ao entregar WatermarkJob do pedido ${job.order_id}: ${this.describeError(lastError)}`,
     );
+  }
+
+  /**
+   * Extrai uma mensagem legível do erro final. Erros do Axios não viram
+   * uma string útil com template literal puro (ex.: "[object Object]"),
+   * então priorizamos err.message; para AxiosError sem response (falha de
+   * rede/timeout), isso já traz algo como "timeout of 15000ms exceeded".
+   */
+  private describeError(err: unknown): string {
+    if (axios.isAxiosError(err)) {
+      const status = err.response?.status;
+      return status ? `HTTP ${status} - ${err.message}` : err.message;
+    }
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return String(err);
   }
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private getErrorMessage(error: unknown): string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === 'string') return error;
-    try {
-      return JSON.stringify(error);
-    } catch {
-      return String(error);
-    }
   }
 }

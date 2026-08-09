@@ -1,6 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { HttpWatermarkJobDispatcher, WatermarkDispatchError } from './watermark-job.dispatcher';
+import {
+  HttpWatermarkJobDispatcher,
+  WatermarkDispatchError,
+  WatermarkJobRejectedError,
+} from './watermark-job.dispatcher';
 import { WatermarkJob } from './watermark-job.type';
 
 jest.mock('axios');
@@ -48,28 +52,43 @@ describe('HttpWatermarkJobDispatcher', () => {
     expect(httpPostMock).toHaveBeenCalledTimes(2);
   });
 
-  it('não faz retry em erro 4xx (payload rejeitado) e propaga WatermarkDispatchError', async () => {
+  it('não faz retry em erro 4xx (payload rejeitado) e propaga WatermarkJobRejectedError', async () => {
     httpPostMock.mockRejectedValueOnce({ isAxiosError: true, response: { status: 422 } });
     const dispatcher = new HttpWatermarkJobDispatcher(config);
 
-    await expect(dispatcher.dispatch(job)).rejects.toBeInstanceOf(WatermarkDispatchError);
+    await expect(dispatcher.dispatch(job)).rejects.toBeInstanceOf(WatermarkJobRejectedError);
     expect(httpPostMock).toHaveBeenCalledTimes(1);
   });
 
-  it('propaga WatermarkDispatchError após esgotar as tentativas em falha persistente', async () => {
-    httpPostMock.mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+  it('propaga WatermarkDispatchError após esgotar as tentativas em falha persistente, com mensagem legível (não "[object Object]")', async () => {
+    httpPostMock.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 500 },
+      message: 'Request failed with status code 500',
+    });
     const dispatcher = new HttpWatermarkJobDispatcher(config);
 
-    await expect(dispatcher.dispatch(job)).rejects.toBeInstanceOf(WatermarkDispatchError);
+    let caught: unknown;
+    try {
+      await dispatcher.dispatch(job);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(WatermarkDispatchError);
+    expect((caught as Error).message).toContain('HTTP 500');
+    expect((caught as Error).message).not.toContain('[object Object]');
     // maxRetries=2 => 3 tentativas no total
     expect(httpPostMock).toHaveBeenCalledTimes(3);
   });
 
-  it('propaga WatermarkDispatchError em falha de rede (sem response) após esgotar tentativas', async () => {
-    httpPostMock.mockRejectedValue({ isAxiosError: true, message: 'timeout' });
+  it('propaga WatermarkDispatchError em falha de rede (sem response) após esgotar tentativas, preservando a mensagem original', async () => {
+    httpPostMock.mockRejectedValue({ isAxiosError: true, message: 'timeout of 15000ms exceeded' });
     const dispatcher = new HttpWatermarkJobDispatcher(config);
 
-    await expect(dispatcher.dispatch(job)).rejects.toBeInstanceOf(WatermarkDispatchError);
+    await expect(dispatcher.dispatch(job)).rejects.toMatchObject({
+      message: expect.stringContaining('timeout of 15000ms exceeded'),
+    });
     expect(httpPostMock).toHaveBeenCalledTimes(3);
   });
 });

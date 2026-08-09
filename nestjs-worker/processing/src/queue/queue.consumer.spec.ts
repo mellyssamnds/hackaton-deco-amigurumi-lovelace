@@ -2,13 +2,14 @@ import { ConfigService } from '@nestjs/config';
 import { CloudflareQueueClient } from './cloudflare-queue.client';
 import { QueueConsumer } from './queue.consumer';
 import { InvalidBuyerCpfError } from '../order/order.service';
-import { NonRetriableWatermarkDispatchError } from '../order/watermark-job.dispatcher';
+import { WatermarkDispatchError, WatermarkJobRejectedError } from '../order/watermark-job.dispatcher';
 import { WatermarkJob } from '../order/watermark-job.type';
 
 describe('QueueConsumer', () => {
   function buildConsumer(opts: {
     messages: any[];
     buildWatermarkJob: (orderId: string) => Promise<WatermarkJob>;
+    dispatch?: (job: WatermarkJob) => Promise<void>;
   }) {
     const queueClient = {
       pull: jest.fn().mockResolvedValue(opts.messages),
@@ -20,7 +21,9 @@ describe('QueueConsumer', () => {
       buildWatermarkJob: jest.fn().mockImplementation(opts.buildWatermarkJob),
     } as any;
 
-    const dispatcher = { dispatch: jest.fn().mockResolvedValue(undefined) };
+    const dispatcher = {
+      dispatch: jest.fn().mockImplementation(opts.dispatch ?? (async () => undefined)),
+    };
 
     const consumer = new QueueConsumer(
       queueClient,
@@ -101,27 +104,50 @@ describe('QueueConsumer', () => {
     expect(queueClient.ack).toHaveBeenCalledWith([]);
   });
 
-  it('erro 4xx rejeitado pela Parte 3 → ack (não fica em retry na fila)', async () => {
-    const { consumer, queueClient, dispatcher } = buildConsumer({
+  it('Parte 3 rejeita o job (4xx, WatermarkJobRejectedError) → ack, não fica retentando indefinidamente', async () => {
+    const job: WatermarkJob = {
+      order_id: '123',
+      buyer_full_name: 'Maria',
+      buyer_cpf: '123.456.789-00',
+      buyer_email: 'maria@example.com',
+      product_ids: ['1'],
+    };
+
+    const { consumer, queueClient } = buildConsumer({
       messages: [{ id: 'm1', lease_id: 'lease-1', body: validEnvelope }],
-      buildWatermarkJob: async () => ({
-        order_id: '123',
-        buyer_full_name: 'Maria',
-        buyer_cpf: '123.456.789-00',
-        buyer_email: 'maria@example.com',
-        product_ids: ['1'],
-      }),
+      buildWatermarkJob: async () => job,
+      dispatch: async () => {
+        throw new WatermarkJobRejectedError('watermark-email respondeu 422');
+      },
     });
-    (dispatcher.dispatch as jest.Mock).mockRejectedValueOnce(
-      new NonRetriableWatermarkDispatchError(
-        'watermark-email respondeu 422 para o pedido 123',
-      ),
-    );
 
     await consumer.pollOnce();
 
     expect(queueClient.ack).toHaveBeenCalledWith(['lease-1']);
     expect(queueClient.retry).toHaveBeenCalledWith([]);
+  });
+
+  it('falha de infraestrutura ao entregar à Parte 3 (WatermarkDispatchError) → retry', async () => {
+    const job: WatermarkJob = {
+      order_id: '123',
+      buyer_full_name: 'Maria',
+      buyer_cpf: '123.456.789-00',
+      buyer_email: 'maria@example.com',
+      product_ids: ['1'],
+    };
+
+    const { consumer, queueClient } = buildConsumer({
+      messages: [{ id: 'm1', lease_id: 'lease-1', body: validEnvelope }],
+      buildWatermarkJob: async () => job,
+      dispatch: async () => {
+        throw new WatermarkDispatchError('falha de rede ao chamar watermark-email');
+      },
+    });
+
+    await consumer.pollOnce();
+
+    expect(queueClient.retry).toHaveBeenCalledWith(['lease-1']);
+    expect(queueClient.ack).toHaveBeenCalledWith([]);
   });
 
   it('fila vazia → não chama ack/retry', async () => {
