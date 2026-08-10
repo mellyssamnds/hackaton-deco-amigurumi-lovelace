@@ -13,7 +13,7 @@ binding = "ORDERS_QUEUE"
 binding = "IDEMPOTENCY_KV"
 # TODO(você): substituir pelo ID real do namespace KV.
 # Criar com: npx wrangler kv namespace create IDEMPOTENCY_KV
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "3754032182c04f64b4beda1199985562"
 
 [vars]
 # Nome do header HTTP onde a Nuvemshop envia a assinatura HMAC do payload.

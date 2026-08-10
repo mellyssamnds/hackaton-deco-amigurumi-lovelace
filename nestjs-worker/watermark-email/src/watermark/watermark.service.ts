@@ -1,19 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, degrees, rgb } from 'pdf-lib';
+import { WatermarkMode } from '../llm/llm-advisor.service';
 
 const BAR_HEIGHT = 24;
 const BAR_FONT_SIZE = 9;
-const DIAGONAL_FONT_SIZE = 22;
 
 /**
  * Aplica a marca d'água de licenciamento a um PDF, inteiramente em memória
- * (US08). Nunca lê nem escreve nada em disco - quem chama passa os bytes
+ * (US08, US16). Nunca lê nem escreve nada em disco — quem chama passa os bytes
  * originais e recebe os bytes marcados de volta.
  *
- * Marca aplicada (BACKLOG.md > Parte 3):
- *   - barra cinza no topo e rodapé de cada página, texto branco centralizado:
- *     "Produto licenciado para: {Nome completo} - CPF: {CPF formatado}"
- *   - marca diagonal discreta no corpo da página (reforço anti-recorte)
+ * Modos suportados (US16):
+ *   sutil     → apenas marca diagonal discreta (opacity 0.08) — bom cliente.
+ *   padrao    → barra topo + rodapé + diagonal (opacity 0.15) — padrão histórico.
+ *   agressiva → barra topo + rodapé + duas diagonais (opacity 0.30) — risco.
  */
 @Injectable()
 export class WatermarkService {
@@ -21,6 +21,7 @@ export class WatermarkService {
     originalPdfBytes: Uint8Array,
     buyerFullName: string,
     buyerCpf: string,
+    mode: WatermarkMode = 'padrao',
   ): Promise<Uint8Array> {
     const pdfDoc = await PDFDocument.load(originalPdfBytes);
     const barFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -29,9 +30,18 @@ export class WatermarkService {
     const label = `Produto licenciado para: ${buyerFullName} - CPF: ${buyerCpf}`;
 
     for (const page of pdfDoc.getPages()) {
-      this.drawBar(page, barFont, label, 'top');
-      this.drawBar(page, barFont, label, 'bottom');
-      this.drawDiagonalMark(page, diagonalFont, label);
+      if (mode === 'padrao' || mode === 'agressiva') {
+        this.drawBar(page, barFont, label, 'top');
+        this.drawBar(page, barFont, label, 'bottom');
+      }
+
+      const diagonalOpacity = mode === 'sutil' ? 0.08 : mode === 'agressiva' ? 0.30 : 0.15;
+      this.drawDiagonalMark(page, diagonalFont, label, diagonalOpacity, 0.45);
+
+      if (mode === 'agressiva') {
+        // Segunda diagonal deslocada para dificultar remoção por recorte
+        this.drawDiagonalMark(page, diagonalFont, label, diagonalOpacity, 0.70);
+      }
     }
 
     return pdfDoc.save();
@@ -59,16 +69,22 @@ export class WatermarkService {
     });
   }
 
-  private drawDiagonalMark(page: PDFPage, font: PDFFont, text: string) {
+  private drawDiagonalMark(
+    page: PDFPage,
+    font: PDFFont,
+    text: string,
+    opacity: number,
+    yRatio: number,
+  ) {
     const { width, height } = page.getSize();
 
     page.drawText(text, {
       x: width * 0.12,
-      y: height * 0.45,
-      size: DIAGONAL_FONT_SIZE,
+      y: height * yRatio,
+      size: 22,
       font,
       color: rgb(0.6, 0.6, 0.6),
-      opacity: 0.15,
+      opacity,
       rotate: degrees(35),
     });
   }

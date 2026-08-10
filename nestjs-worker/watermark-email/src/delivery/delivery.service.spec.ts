@@ -55,6 +55,18 @@ describe('DeliveryService', () => {
     expect(sendMock).toHaveBeenCalledTimes(2);
   });
 
+  it('simula o envio localmente quando o modo mock está ativado', async () => {
+    const service = new DeliveryService(buildConfig({ EMAIL_DELIVERY_MODE: 'mock' }));
+
+    await expect(
+      service.sendEbooks('order-4', 'cliente@example.com', 'Bia', [
+        { filename: 'a.pdf', content: Buffer.from('x') },
+      ]),
+    ).resolves.toBeUndefined();
+
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
   it('lança EmailDeliveryError após esgotar as tentativas', async () => {
     sendMock.mockRejectedValue(new Error('fora do ar'));
     const service = new DeliveryService(buildConfig({ EMAIL_MAX_RETRIES: 1 }));

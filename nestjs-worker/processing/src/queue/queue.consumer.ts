@@ -56,6 +56,12 @@ export class QueueConsumer implements OnModuleInit {
   /** Exposto para testes - roda um único ciclo de pull + processamento. */
   async pollOnce(): Promise<void> {
     if (this.polling) return; // evita sobreposição se um ciclo demorar
+
+    // Modo mock/local: não faz polling se não houver token da Cloudflare configurado
+    if (!this.config.get<string>('CF_API_TOKEN')) {
+      return;
+    }
+
     this.polling = true;
 
     try {
