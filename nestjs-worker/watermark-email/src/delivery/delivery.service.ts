@@ -35,7 +35,12 @@ export class DeliveryService {
 
   constructor(private readonly config: ConfigService) {
     this.deliveryMode = this.config.get<string>('EMAIL_DELIVERY_MODE', 'resend');
-    this.resend = new Resend(this.config.get<string>('RESEND_API_KEY', ''));
+    
+    // Evita crash na inicialização do NestJS (Resend SDK valida se a string é vazia no construtor)
+    const rawApiKey = this.config.get<string>('RESEND_API_KEY', '');
+    const apiKey = rawApiKey || (this.deliveryMode === 'mock' ? 're_dummy_key_for_mock' : '');
+    
+    this.resend = new Resend(apiKey);
     this.fromEmail = this.config.get<string>(
       'RESEND_FROM_EMAIL',
       'entregas@amigurumilovelace.com.br',
@@ -44,11 +49,15 @@ export class DeliveryService {
     this.baseDelayMs = Number(this.config.get('EMAIL_RETRY_BASE_DELAY_MS', 500));
   }
 
+  /**
+   * @param emailBody Corpo HTML gerado pela LLM (US17). Se ausente, usa o template fixo.
+   */
   async sendEbooks(
     orderId: string,
     buyerEmail: string,
     buyerFullName: string,
     attachments: WatermarkedAttachment[],
+    emailBody?: string,
   ): Promise<void> {
     if (this.deliveryMode === 'mock') {
       this.logger.log(`Modo mock ativado: simulando envio para o pedido ${orderId}`);
@@ -59,11 +68,16 @@ export class DeliveryService {
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
+        const html =
+          emailBody && emailBody.trim().length > 0
+            ? emailBody
+            : this.buildEmailHtml(buyerFullName);
+
         const { error } = await this.resend.emails.send({
           from: this.fromEmail,
           to: buyerEmail,
-          subject: 'Seu e-book Amigurumi Lovelace chegou!',
-          html: this.buildEmailHtml(buyerFullName),
+          subject: 'Seu e-book Amigurumi Lovelace chegou! 🧶',
+          html,
           attachments: attachments.map((a) => ({
             filename: a.filename,
             content: a.content,

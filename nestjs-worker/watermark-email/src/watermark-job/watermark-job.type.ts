@@ -12,4 +12,11 @@ export interface WatermarkJob {
   buyer_cpf: string; // formatado, ex: 123.456.789-00
   buyer_email: string;
   product_ids: string[]; // usados para localizar assets/ebooks/{product_id}.pdf
+  /**
+   * Histórico opcional do comprador (US16).
+   * Ex: "2 compras anteriores, nenhum chargeback".
+   * Campo opcional — a Parte 2 pode omiti-lo sem quebrar o contrato.
+   */
+  buyer_history?: string;
 }
+

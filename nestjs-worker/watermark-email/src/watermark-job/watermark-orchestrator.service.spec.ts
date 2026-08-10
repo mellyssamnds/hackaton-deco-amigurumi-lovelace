@@ -3,6 +3,7 @@ import { join } from 'path';
 import { EbookAssetSource } from '../ebook/ebook-asset.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { WatermarkService } from '../watermark/watermark.service';
+import { LlmAdvisorService, LlmAdvice } from '../llm/llm-advisor.service';
 import { WatermarkJob } from './watermark-job.type';
 import { WatermarkOrchestratorService } from './watermark-orchestrator.service';
 
@@ -18,7 +19,13 @@ describe('WatermarkOrchestratorService', () => {
   let ebookAssetSource: jest.Mocked<EbookAssetSource>;
   let watermarkService: jest.Mocked<WatermarkService>;
   let deliveryService: jest.Mocked<DeliveryService>;
+  let llmAdvisor: jest.Mocked<LlmAdvisorService>;
   let orchestrator: WatermarkOrchestratorService;
+
+  const defaultAdvice: LlmAdvice = {
+    watermarkMode: 'padrao',
+    emailBody: '<p>Olá, Maria! Seu e-book está em anexo.</p>',
+  };
 
   beforeEach(() => {
     ebookAssetSource = { load: jest.fn() } as unknown as jest.Mocked<EbookAssetSource>;
@@ -26,6 +33,7 @@ describe('WatermarkOrchestratorService', () => {
       applyWatermark: jest.fn(),
     } as unknown as jest.Mocked<WatermarkService>;
     deliveryService = { sendEbooks: jest.fn() } as unknown as jest.Mocked<DeliveryService>;
+    llmAdvisor = { advise: jest.fn() } as unknown as jest.Mocked<LlmAdvisorService>;
 
     ebookAssetSource.load.mockImplementation(async (productId) =>
       Buffer.from(`pdf-original-${productId}`),
@@ -34,11 +42,13 @@ describe('WatermarkOrchestratorService', () => {
       Buffer.concat([Buffer.from(bytes), Buffer.from('-marcado')]),
     );
     deliveryService.sendEbooks.mockResolvedValue(undefined);
+    llmAdvisor.advise.mockResolvedValue(defaultAdvice);
 
     orchestrator = new WatermarkOrchestratorService(
       ebookAssetSource,
       watermarkService,
       deliveryService,
+      llmAdvisor,
     );
   });
 
@@ -61,9 +71,41 @@ describe('WatermarkOrchestratorService', () => {
     ]);
   });
 
+  it('passa o watermarkMode retornado pela LLM ao WatermarkService (US16)', async () => {
+    llmAdvisor.advise.mockResolvedValueOnce({
+      watermarkMode: 'sutil',
+      emailBody: '<p>Olá!</p>',
+    });
+
+    await orchestrator.process(job);
+
+    expect(watermarkService.applyWatermark).toHaveBeenCalledWith(
+      expect.anything(),
+      job.buyer_full_name,
+      job.buyer_cpf,
+      'sutil',
+    );
+  });
+
+  it('passa o emailBody retornado pela LLM ao DeliveryService (US17)', async () => {
+    const customBody = '<p>E-mail personalizado pela LLM!</p>';
+    llmAdvisor.advise.mockResolvedValueOnce({
+      watermarkMode: 'padrao',
+      emailBody: customBody,
+    });
+
+    await orchestrator.process(job);
+
+    expect(deliveryService.sendEbooks).toHaveBeenCalledWith(
+      job.order_id,
+      job.buyer_email,
+      job.buyer_full_name,
+      expect.any(Array),
+      customBody,
+    );
+  });
+
   it('nunca escreve o PDF gerado em disco (LGPD / US09)', () => {
-    // O orquestrador só deve ler (via EbookAssetSource) e enviar (via
-    // DeliveryService) - nenhuma escrita em disco deve existir no fluxo.
     const source = readFileSync(
       join(__dirname, 'watermark-orchestrator.service.ts'),
       'utf-8',
@@ -78,3 +120,5 @@ describe('WatermarkOrchestratorService', () => {
     expect(deliveryService.sendEbooks).not.toHaveBeenCalled();
   });
 });
+
+

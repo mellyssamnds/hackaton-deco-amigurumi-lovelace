@@ -23,7 +23,7 @@ import { z } from 'zod';
 export const OrderProductSchema = z.object({
   product_id: z.union([z.string(), z.number()]).transform((v) => String(v)),
   name: z.string().optional(),
-  quantity: z.number().int().positive().optional(),
+  quantity: z.coerce.number().int().positive().optional(),
 });
 
 export const OrderCustomerSchema = z.object({
