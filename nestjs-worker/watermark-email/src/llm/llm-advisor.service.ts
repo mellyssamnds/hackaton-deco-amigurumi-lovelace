@@ -48,7 +48,7 @@ export class LlmAdvisorService {
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('LLM_API_KEY', '');
-    const modelName = this.config.get<string>('LLM_MODEL', 'gemini-1.5-flash');
+    const modelName = this.config.get<string>('LLM_MODEL', 'gemini-flash-latest');
     this.timeoutMs = Number(this.config.get('LLM_TIMEOUT_MS', 8000));
 
     if (!apiKey) {
@@ -156,7 +156,8 @@ Retorne APENAS um JSON válido (sem markdown, sem texto extra) com este formato 
       );
       return FALLBACK;
     }
-
+    this.logger.log(`LLM respondeu com sucesso: ${JSON.stringify(parsed.data)}`);
+    
     return parsed.data;
   }
 
