@@ -21,7 +21,7 @@ describe('LlmAdvisorService', () => {
             get: (key: string, def?: unknown) => {
               const map: Record<string, unknown> = {
                 LLM_API_KEY: apiKey,
-                LLM_MODEL: 'gemini-3.5-flash',
+                LLM_MODEL: 'gemini-flash-latest',
                 LLM_TIMEOUT_MS: 5000,
               };
               return map[key] ?? def;
